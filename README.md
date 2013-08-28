@@ -16,6 +16,7 @@ Note that sql_mode_set() also accepts a comma-separated list of flags.
 Usage
 =====
 
+```
 void _.sql_mode_list()
 Show a human-readable list of active SQL_MODE flags.
 
@@ -27,16 +28,19 @@ Set the specified SQL_MODE flag. Errors are not handled.
 
 void _.sql_mode_unset(flag_name)
 Unset the specified SQL_MODE flag. If it wasn't set (or doesn't exist) an error is produced (SQLSTATE: '45000').
+```
 	
 Example
 =======
 
+```sql
 SET @flag = 'HIGH_NOT_PRECEDENCE';
 CALL _.sql_mode_list();
 CALL _.sql_mode_set(@flag);
 SELECT _.sql_mode_is_set(@flag);
 CALL _.sql_mode_unset(@flag);
 SELECT _.sql_mode_is_set(@flag);
+```
 
 To-Do
 =====
