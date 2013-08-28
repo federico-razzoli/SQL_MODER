@@ -91,10 +91,10 @@ CREATE PROCEDURE `_`.`sql_mode_unset`(IN `flag_name` TEXT)
 	CONTAINS SQL
 	COMMENT 'Unset SQL_MODE flag'
 BEGIN
-	SET @__stk_temp = @@global.sql_mode;
+	SET @__stk__temp = @@global.sql_mode;
 	SET @@global.sql_mode = REPLACE(UPPER(@@global.sql_mode), UPPER(`flag_name`), '');
-	IF @__stk_temp = @@global.sql_mode THEN
-		SET @__stk_temp = NULL;
+	IF @__stk__temp = @@global.sql_mode THEN
+		SET @__stk__temp = NULL;
 		SET @message_text = CONCAT('Flag \'', `flag_name`, '\' was not set');
 		/*!50500
 			SIGNAL SQLSTATE '45000'
@@ -102,7 +102,7 @@ BEGIN
 		*/
 		SELECT @message_text AS `error`;
 	ELSE
-		SET @__stk_temp = NULL;
+		SET @__stk__temp = NULL;
 	END IF;
 END;
 
