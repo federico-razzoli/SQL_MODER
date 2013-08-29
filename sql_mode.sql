@@ -26,6 +26,8 @@
 	Usage:
 		void _.sql_mode_list()
 			Show a human-readable list of active SQL_MODE flags.
+		void _.sql_mode_show()
+			A better (but slower) version of sql_mode_list().
 		BOOL _.sql_mode_is_set(flag_name)
 			Return TRUE if flag_name is set, else return FALSE.
 		void _.sql_mode_set(flag_name)
@@ -37,6 +39,7 @@
 	Example:
 		SET @flag = 'HIGH_NOT_PRECEDENCE';
 		CALL _.sql_mode_list();
+		CALL _.sql_mode_show();
 		CALL _.sql_mode_set(@flag);
 		SELECT _.sql_mode_is_set(@flag);
 		CALL _.sql_mode_unset(@flag);
@@ -64,6 +67,33 @@ CREATE PROCEDURE `_`.`sql_mode_list`()
 	COMMENT 'Show a readable list of SQL_MODE flags'
 BEGIN
 	SELECT CONCAT('\n', REPLACE(@@global.sql_mode, ',', '\n'), '\n') AS `SQL_MODE Flags`;
+END;
+
+
+DROP PROCEDURE IF EXISTS `_`.`sql_mode_show`;
+CREATE PROCEDURE `_`.`sql_mode_show`()
+	CONTAINS SQL
+	COMMENT 'Show SQL_MODE flags as a resultset'
+BEGIN
+	-- SQL to create flag list table
+	DROP TEMPORARY TABLE IF EXISTS `_`.`SQL_MODE_FLAGS`;
+	CREATE TEMPORARY TABLE `_`.`SQL_MODE_FLAGS` (`FLAG` VARCHAR(30) NOT NULL) ENGINE = MEMORY;
+	SET @__stk__temp = CONCAT(
+			'INSERT INTO `_`.`sql_mode_flags` (`FLAG`) VALUES (''',
+			REPLACE(@@global.sql_mode, ',', '''), ('''),
+			''');'
+		);
+	
+	-- exec SQL & free memory
+	PREPARE __stk__stmt FROM @__stk__temp;
+	EXECUTE __stk__stmt;
+	DEALLOCATE PREPARE __stk__stmt;
+	SET @__stk__temp = NULL;
+	
+	-- show flags
+	SELECT `FLAG` FROM `SQL_MODE_FLAGS` ORDER BY `FLAG`;
+	
+	DROP TEMPORARY TABLE IF EXISTS `_`.`sql_mode_flags`;
 END;
 
 

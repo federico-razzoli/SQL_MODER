@@ -20,6 +20,9 @@ Usage
 void _.sql_mode_list()
 Show a human-readable list of active SQL_MODE flags.
 
+void _.sql_mode_show()
+A better (but slower) version of sql_mode_list().
+
 BOOL _.sql_mode_is_set(flag_name)
 Return TRUE if flag_name is set, else return FALSE.
 
