@@ -66,7 +66,7 @@ CREATE PROCEDURE `_`.`sql_mode_list`()
 	CONTAINS SQL
 	COMMENT 'Show a readable list of SQL_MODE flags'
 BEGIN
-	SELECT CONCAT('\n', REPLACE(@@global.sql_mode, ',', '\n'), '\n') AS `SQL_MODE Flags`;
+	SELECT CONCAT('\n', REPLACE(@@global.sql_mode, ',', '\n'), '\n') AS `SQL_MODE_FLAGS`;
 END;
 
 
@@ -79,7 +79,7 @@ BEGIN
 	DROP TEMPORARY TABLE IF EXISTS `_`.`SQL_MODE_FLAGS`;
 	CREATE TEMPORARY TABLE `_`.`SQL_MODE_FLAGS` (`FLAG` VARCHAR(30) NOT NULL) ENGINE = MEMORY;
 	SET @__stk__temp = CONCAT(
-			'INSERT INTO `_`.`sql_mode_flags` (`FLAG`) VALUES (''',
+			'INSERT INTO `_`.`SQL_MODE_FLAGS` (`FLAG`) VALUES (''',
 			REPLACE(@@global.sql_mode, ',', '''), ('''),
 			''');'
 		);
