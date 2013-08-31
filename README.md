@@ -45,6 +45,20 @@ CALL _.sql_mode_unset(@flag);
 SELECT _.sql_mode_is_set(@flag);
 ```
 
+Tests
+=====
+
+The test_sql_mode.sql file contains a Test Case. To tun it, you need to install STK/Unit:
+http://stk.wikidot.com/stk-unit
+
+The command to run the Test Case and see human-readable results on the command line is:
+
+```
+CALL stk_unit.tc('test_sql_mode');
+```
+
+The results will appear in the command line.
+
 To-Do
 =====
 
