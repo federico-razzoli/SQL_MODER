@@ -44,11 +44,6 @@
 		SELECT _.sql_mode_is_set(@flag);
 		CALL _.sql_mode_unset(@flag);
 		SELECT _.sql_mode_is_set(@flag);
-	
-	To-Do:
-		Nothing: this is ok for me.
-		But if you want generalized versions of these routines, to work with
-		@@session.sql_mode or optimizer_switch or other vars, just let me know.
 */
 
 
@@ -59,6 +54,11 @@ DELIMITER ||
 CREATE DATABASE IF NOT EXISTS `_`
 	DEFAULT CHARACTER SET = 'utf8'
 	DEFAULT COLLATE = 'utf8_general_ci';
+
+
+/*
+ *	Routines to modify SQL_MODE
+ */
 
 
 DROP PROCEDURE IF EXISTS `_`.`sql_mode_list`;
@@ -127,13 +127,194 @@ BEGIN
 		SET @__stk__temp = NULL;
 		SET @message_text = CONCAT('Flag \'', `flag_name`, '\' was not set');
 		/*!50500
-			SIGNAL SQLSTATE '45000'
-				SET MESSAGE_TEXT = @message_text;
+			SIGNAL SQLSTATE '45000' SET
+				CLASS_ORIGIN = 'SQL_MODER',
+				MESSAGE_TEXT = @message_text;
 		*/
 		SELECT @message_text AS `error`;
 	ELSE
 		SET @__stk__temp = NULL;
 	END IF;
+END;
+
+
+DROP FUNCTION IF EXISTS `_`.`sql_mode_is_valid`;
+CREATE FUNCTION `_`.`sql_mode_is_valid`(`sql_mode_string` TEXT)
+	RETURNS BOOLEAN
+	DETERMINISTIC
+	CONTAINS SQL
+	COMMENT 'Return wether SQL_MODE is valid'
+BEGIN
+	-- handle invalid SQL_MODE
+	DECLARE EXIT HANDLER
+		FOR 1231
+	BEGIN
+		RETURN FALSE;
+	END;
+	
+	-- dont worry: as soon as this function ends,
+	-- old SQL_MODE is restored
+	SET @@session.sql_mode = `sql_mode_string`;
+	RETURN TRUE;
+END;
+
+
+/*
+ *	Routines to save/load SQL_MODE
+ */
+
+
+CREATE TABLE IF NOT EXISTS `_`.`sql_mode`
+(
+	`id`    SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'PK',
+	`name`  VARCHAR(130) NOT NULL UNIQUE COMMENT 'Unique identifier',
+	`mode`  TEXT NOT NULL COMMENT 'SQL_MODE string'
+)
+	ENGINE = InnoDB,
+	COMMENT = 'Saved SQL_MODEs';
+
+
+DROP PROCEDURE IF EXISTS `_`.`install_default`;
+CREATE PROCEDURE `_`.`install_default`()
+	MODIFIES SQL DATA
+	COMMENT 'Re-insert default SQL_MODEs'
+BEGIN
+	REPLACE INTO `_`.`sql_mode`
+			(`name`, `mode`)
+		VALUES
+			('EMPTY', ''),
+			('MYSQL56', 'NO_ENGINE_SUBSTITUTION'),
+			('STRICT', 'ERROR_FOR_DIVISION_BY_ZERO,NO_ZERO_DATE,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION,ONLY_FULL_GROUP_BY,STRICT_ALL_TABLES,STRICT_TRANS_TABLES');
+END;
+
+CALL `_`.`install_default`();
+
+
+DROP PROCEDURE IF EXISTS `_`.`sql_mode_save`;
+CREATE PROCEDURE `_`.`sql_mode_save`(IN `sql_mode_name` VARCHAR(64), IN `sql_mode_string` VARCHAR(400))
+	MODIFIES SQL DATA
+	COMMENT 'Store specified SQL_MODE'
+BEGIN
+	-- duplicate key
+	DECLARE EXIT HANDLER
+		FOR 1062
+	BEGIN
+		SET @message_text = CONCAT('SQL_MODE already saved: \'', `sql_mode_name`, '\'');
+		/*!50500
+			SIGNAL SQLSTATE '45000' SET
+					CLASS_ORIGIN = 'SQL_MODER',
+					MESSAGE_TEXT = @message_text,
+					SCHEMA_NAME = '_',
+					TABLE_NAME = 'sql_mode',
+					COLUMN_NAME = 'name',
+					CONSTRAINT_SCHEMA = '_',
+					CONSTRAINT_NAME = 'name';
+		*/
+		SELECT @message_text AS `error`;
+	END;
+	
+	INSERT INTO `_`.`sql_mode`
+			(`name`, `mode`)
+		VALUE
+			(`sql_mode_name`, UPPER(`sql_mode_string`));
+END;
+
+
+DROP PROCEDURE IF EXISTS `_`.`sql_mode_save_current`;
+CREATE PROCEDURE `_`.`sql_mode_save_current`(IN `sql_mode_name` VARCHAR(64))
+	MODIFIES SQL DATA
+	COMMENT 'Store current session SQL_MODE'
+BEGIN
+	CALL `_`.`sql_mode_save`(`sql_mode_name`, @@session.sql_mode);
+END;
+
+
+DROP PROCEDURE IF EXISTS `_`.`sql_mode_force_save`;
+CREATE PROCEDURE `_`.`sql_mode_force_save`(IN `sql_mode_name` VARCHAR(64), IN `sql_mode_string` VARCHAR(400))
+	MODIFIES SQL DATA
+	COMMENT 'Store specified SQL_MODE, even if exists'
+BEGIN
+	DECLARE EXIT HANDLER
+		FOR 1305
+	BEGIN
+		SET @message_text = CONCAT('No transaction: cannot ROLLBACK old SQL_MODE deletion');
+		/*!50500
+			SIGNAL SQLSTATE '45000' SET
+				CLASS_ORIGIN = 'SQL_MODER',
+				MESSAGE_TEXT = @message_text;
+		*/
+		SELECT @message_text AS `error`;
+	END;
+	
+	SAVEPOINT `sql_mode_force_save`;
+	DELETE FROM `_`.`sql_mode` WHERE `name` = `sql_mode_name`;
+	INSERT INTO `_`.`sql_mode`
+			(`name`, `mode`)
+		VALUE
+			(`sql_mode_name`, UPPER(`sql_mode_string`));
+	
+	IF NOT ROW_COUNT() = 1 THEN
+		ROLLBACK TO SAVEPOINT `sql_mode_force_save`;
+	END IF;
+END;
+
+
+DROP PROCEDURE IF EXISTS `_`.`sql_mode_unsave`;
+CREATE PROCEDURE `_`.`sql_mode_unsave`(IN `sql_mode_name` VARCHAR(64))
+	MODIFIES SQL DATA
+	COMMENT 'Delete specified SQL_MODE'
+BEGIN
+	DELETE FROM `_`.`sql_mode` WHERE `name` = `sql_mode_name`;
+	
+	IF NOT ROW_COUNT() > 0 THEN
+		SET @message_text = CONCAT('SQL_MODE not found: \'', `sql_mode_name`, '\'');
+		/*!50500
+			SIGNAL SQLSTATE '45000' SET
+				CLASS_ORIGIN = 'SQL_MODER',
+				MESSAGE_TEXT = @message_text;
+		*/
+		SELECT @message_text AS `error`;
+	END IF;
+END;
+
+
+DROP FUNCTION IF EXISTS `_`.`sql_mode_is_saved`;
+CREATE FUNCTION `_`.`sql_mode_is_saved`(`sql_mode_name` VARCHAR(64))
+	RETURNS BOOLEAN
+	DETERMINISTIC
+	READS SQL DATA
+	COMMENT 'Return wether SQL_MODE is stored'
+BEGIN
+	RETURN EXISTS (SELECT 1 FROM `_`.`sql_mode` WHERE `name` = `sql_mode_name`);
+END;
+
+
+DROP PROCEDURE IF EXISTS `_`.`sql_mode_show_saved`;
+CREATE PROCEDURE `_`.`sql_mode_show_saved`()
+	READS SQL DATA
+	COMMENT 'SHOW stored SQL_MODEs'
+BEGIN
+	SELECT * FROM `_`.`sql_mode`;
+END;
+
+
+DROP PROCEDURE IF EXISTS `_`.`sql_mode_show_saved_like`;
+CREATE PROCEDURE `_`.`sql_mode_show_saved_like`(IN `like_pattern` TEXT)
+	READS SQL DATA
+	COMMENT 'SHOW stored SQL_MODEs WHERE name LIKE...'
+BEGIN
+	SELECT * FROM `_`.`sql_mode` WHERE `name` LIKE `like_pattern`;
+END;
+
+
+DROP FUNCTION IF EXISTS `_`.`sql_mode_get`;
+CREATE FUNCTION `_`.`sql_mode_get`(`sql_mode_name` VARCHAR(64))
+	RETURNS TEXT
+	NOT DETERMINISTIC
+	READS SQL DATA
+	COMMENT 'Return stored SQL_MODE with specified name'
+BEGIN
+	RETURN (SELECT `mode` FROM `_`.`sql_mode` WHERE `name` = `sql_mode_name`);
 END;
 
 
